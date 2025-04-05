@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 import os
 import json
 from ..elasticsearch.indexer import search_products, get_suggestions
+from ..models.user_preferences import UserPreferencesManager
+from ..database.database import SessionLocal
 
 # Load environment variables
 load_dotenv()
@@ -18,16 +20,52 @@ print("OpenAI API key loaded successfully")
 class ShoppingAssistant:
     def __init__(self):
         self.conversation_history = []
+        self.db = SessionLocal()
+        self.prefs_manager = UserPreferencesManager(self.db)
         
-    def _create_system_prompt(self) -> str:
-        return """Sen bir alışveriş asistanısın. Kullanıcıların isteklerini anlayıp onlara en uygun ürünleri önermelisin.
-        Önerilerini yaparken şu noktalara dikkat et:
-        - Kullanıcının bütçesini sor ve buna uygun ürünler öner
-        - Kullanıcının tercih ettiği markaları ve kategorileri dikkate al
-        - Ürünlerin özelliklerini detaylı bir şekilde açıkla
-        - Kullanıcıya nazik ve yardımcı ol
-        - Türkçe yanıt ver
+    def _create_system_prompt(self, user_id: Optional[str] = None) -> str:
+        base_prompt = """Sen bir alışveriş asistanısın. Görevin, kullanıcının isteklerine göre ürün önermek."""
+
+        if user_id:
+            # Kullanıcı tercihlerini al
+            prefs = self.prefs_manager.get_user_preferences(user_id)
+            recent_searches = self.prefs_manager.get_recent_searches(user_id, limit=5)
+            analysis = self.prefs_manager.analyze_user_preferences(user_id)
+
+            # Tercihleri prompt'a ekle
+            preferences_context = f"""
+            Kullanıcı Tercihleri:
+            - Favori Kategoriler: {', '.join(prefs['favorite_categories']) if prefs['favorite_categories'] else 'Henüz belirlenmedi'}
+            - Tercih Edilen Markalar: {', '.join(prefs['preferred_brands']) if prefs['preferred_brands'] else 'Henüz belirlenmedi'}
+            - Tipik Fiyat Aralığı: {prefs['price_range'].get('min', 'Belirsiz')} TL - {prefs['price_range'].get('max', 'Belirsiz')} TL
+
+            Son Aramalar:
+            {chr(10).join(f"- {search['query']} (Filtreler: {json.dumps(search['filters'], ensure_ascii=False)})" for search in recent_searches)}
+
+            Analiz:
+            - En Çok Aranan Kategoriler: {', '.join(item['category'] for item in analysis['top_categories'])}
+            - En Çok Aranan Markalar: {', '.join(item['brand'] for item in analysis['top_brands'])}
+            - Ortalama Fiyat Aralığı: {analysis['average_price_range']['min']} TL - {analysis['average_price_range']['max']} TL
+            """
+            base_prompt += preferences_context
+
+        base_prompt += """
+        ÖRNEKLER:
+
+        Kullanıcı: "Spor ayakkabı arıyorum, bütçem 500 TL"
+        Context: "İşte size uygun olabilecek ürünler:
+        1. Nike Air Max, Fiyat: 450 TL, Kategori: Ayakkabı
+        2. Adidas Runner, Fiyat: 480 TL, Kategori: Ayakkabı"
+        Asistan: Bütçenize uygun spor ayakkabıları buldum. Nike Air Max (450 TL) ve Adidas Runner (480 TL) mevcut. Her ikisi de 500 TL bütçenizin altında. Nike Air Max biraz daha ekonomik bir seçenek.
+
+        ÖNEMLİ KURALLAR:
+        1. SADECE context'te verilen ürünleri önerebilirsin
+        2. Context'te olmayan ürünleri ASLA önerme
+        3. Fiyatları ve özellikleri değiştirme
+        4. Context'teki ürün listesini aynen kullan
+        5. Kendi kafandan ürün uydurma
         """
+        return base_prompt
 
     def _extract_search_parameters(self, user_message: str) -> Dict[str, Any]:
         """Kullanıcı mesajından arama parametrelerini çıkar"""
@@ -125,73 +163,63 @@ class ShoppingAssistant:
         
         return "\n".join(result)
 
-    async def process_message(self, user_message: str) -> str:
+    async def process_message(self, user_message: str, user_id: Optional[str] = None) -> str:
         """Kullanıcı mesajını işle ve yanıt üret"""
         try:
             # Arama parametrelerini çıkar
             search_params = self._extract_search_parameters(user_message)
             print(f"[DEBUG] Search parameters: {json.dumps(search_params, indent=2, ensure_ascii=False)}")
             
+            # Kullanıcı tercihlerini entegre et
+            if user_id:
+                prefs = self.prefs_manager.get_user_preferences(user_id)
+                # Kullanıcının tercih ettiği markaları ve kategorileri dikkate al
+                if not search_params.get("filters"):
+                    search_params["filters"] = {}
+                if prefs["preferred_brands"] and not search_params["filters"].get("brand"):
+                    search_params["filters"]["preferred_brands"] = prefs["preferred_brands"]
+                if prefs["favorite_categories"] and not search_params["filters"].get("category"):
+                    search_params["filters"]["preferred_categories"] = prefs["favorite_categories"]
+
             # Elasticsearch'te arama yap
             products = search_products(
                 query=search_params["query"],
                 filters=search_params.get("filters", {}),
-                size=100  # Performans için ilk 100 sonuç yeterli
+                size=100
             )
             
             print(f"[DEBUG] Found {len(products)} products")
             if products:
                 print(f"[DEBUG] First product: {json.dumps(products[0], indent=2, ensure_ascii=False)}")
             
+            # Arama geçmişine ekle
+            if user_id:
+                self.prefs_manager.add_search_history(
+                    user_id=user_id,
+                    query=search_params["query"],
+                    filters=search_params.get("filters", {}),
+                    results_count=len(products)
+                )
+            
             # Ürün önerilerini formatla
             product_suggestions = self._format_product_suggestions(products)
             print(f"[DEBUG] Formatted suggestions length: {len(product_suggestions)}")
-            
-            # RAG için optimize edilmiş sistem prompt'u
-            system_prompt = """Sen bir alışveriş asistanısın. Görevin, kullanıcının isteklerine göre ürün önermek.
-
-ÖRNEKLER:
-
-Kullanıcı: "Spor ayakkabı arıyorum, bütçem 500 TL"
-Context: "İşte size uygun olabilecek ürünler:
-1. Nike Air Max, Fiyat: 450 TL, Kategori: Ayakkabı
-2. Adidas Runner, Fiyat: 480 TL, Kategori: Ayakkabı"
-Asistan: Bütçenize uygun spor ayakkabıları buldum. Nike Air Max (450 TL) ve Adidas Runner (480 TL) mevcut. Her ikisi de 500 TL bütçenizin altında. Nike Air Max biraz daha ekonomik bir seçenek.
-
-Kullanıcı: "2000 TL'ye laptop var mı?"
-Context: "Maalesef arama kriterlerinize uygun ürün bulamadım. Farklı bir arama yapmak ister misiniz?"
-Asistan: Maalesef 2000 TL bütçe ile uygun bir laptop bulamadım. Bütçenizi biraz artırmanızı veya ikinci el seçenekleri değerlendirmenizi öneririm.
-
-ÖNEMLİ KURALLAR:
-1. SADECE context'te verilen ürünleri önerebilirsin
-2. Context'te olmayan ürünleri ASLA önerme
-3. Fiyatları ve özellikleri değiştirme
-4. Context'teki ürün listesini aynen kullan
-5. Kendi kafandan ürün uydurma
-
-KULLANICI MESAJI:
-{user_message}
-
-CONTEXT (SADECE BU ÜRÜNLERİ ÖNEREBİLİRSİN):
-{product_suggestions}
-
-Yukarıdaki context'te verilen ürün listesini kullanarak kullanıcıya yardımcı ol. SADECE bu listedeki ürünleri kullanabilirsin!"""
             
             # OpenAI ile yanıt oluştur
             messages = [
                 {
                     "role": "system", 
-                    "content": system_prompt.format(
-                        user_message=user_message,
-                        product_suggestions=product_suggestions
-                    )
-                }
+                    "content": self._create_system_prompt(user_id)
+                },
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": "İşte arama sonuçlarında bulunan ürünler:"},
+                {"role": "system", "content": product_suggestions}
             ]
             
             completion = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=messages,
-                temperature=0.2,  # Daha da tutarlı yanıtlar için
+                temperature=0.2,
                 max_tokens=800
             )
             
@@ -203,6 +231,6 @@ Yukarıdaki context'te verilen ürün listesini kullanarak kullanıcıya yardım
             print(f"[DEBUG] Error processing message: {e}")
             return "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin."
 
-    def reset_conversation(self):
+    def reset_conversation(self, user_id: Optional[str] = None):
         """Sohbet geçmişini temizle"""
         self.conversation_history = [] 

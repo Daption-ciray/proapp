@@ -1,10 +1,38 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from ..database.database import SessionLocal
 from ..models.product import Product
 from .es_client import get_es_client, PRODUCT_INDEX, PRODUCT_MAPPING
+from .cache_manager import cache_search_results
+from datetime import timedelta
 
-def index_products():
-    """Veritabanındaki ürünleri Elasticsearch'e aktarır"""
+BATCH_SIZE = 1000
+
+def optimize_index():
+    """Elasticsearch index'ini optimize et"""
+    es = get_es_client()
+    if not es:
+        return False
+
+    try:
+        # Index ayarlarını optimize et
+        es.indices.put_settings(
+            index=PRODUCT_INDEX,
+            body={
+                "index": {
+                    "refresh_interval": "30s",
+                    "number_of_replicas": 0,
+                    "translog.durability": "async",
+                    "max_result_window": 50000
+                }
+            }
+        )
+        return True
+    except Exception as e:
+        print(f"Index optimizasyon hatası: {e}")
+        return False
+
+def bulk_index_products():
+    """Veritabanındaki ürünleri batch halinde Elasticsearch'e aktar"""
     es = get_es_client()
     if not es:
         print("Elasticsearch bağlantısı kurulamadı")
@@ -15,50 +43,68 @@ def index_products():
         es.indices.delete(index=PRODUCT_INDEX)
     es.indices.create(index=PRODUCT_INDEX, body=PRODUCT_MAPPING)
 
+    # Optimize et
+    optimize_index()
+
     # Veritabanından ürünleri al
     db = SessionLocal()
     try:
-        products = db.query(Product).all()
-        
-        # Bulk indexing için veriyi hazırla
-        bulk_data = []
-        for product in products:
-            # Index action
-            bulk_data.append({
-                "index": {
-                    "_index": PRODUCT_INDEX,
-                    "_id": product.id
-                }
-            })
-            # Document
-            bulk_data.append({
-                "id": product.id,
-                "brand": product.brand,
-                "model": product.model,
-                "price": product.price,
-                "category": product.category,
-                "target_audience": product.target_audience,
-                "description": product.description,
-                "suggest": {
-                    "input": [
-                        product.brand,
-                        product.model,
-                        product.category
-                    ]
-                }
-            })
+        # Toplam ürün sayısını al
+        total_products = db.query(Product).count()
+        print(f"Toplam {total_products} ürün indexlenecek")
 
-        if bulk_data:
-            es.bulk(operations=bulk_data, refresh=True)
-            print(f"{len(products)} ürün başarıyla indexlendi")
-            return True
+        # Batch processing
+        offset = 0
+        while offset < total_products:
+            products = db.query(Product).offset(offset).limit(BATCH_SIZE).all()
+            if not products:
+                break
+
+            # Bulk data hazırla
+            bulk_data = []
+            for product in products:
+                # Index action
+                bulk_data.append({
+                    "index": {
+                        "_index": PRODUCT_INDEX,
+                        "_id": product.id
+                    }
+                })
+                # Document
+                bulk_data.append({
+                    "id": product.id,
+                    "brand": product.brand,
+                    "model": product.model,
+                    "price": product.price,
+                    "category": product.category,
+                    "target_audience": product.target_audience,
+                    "description": product.description,
+                    "suggest": {
+                        "input": [
+                            product.brand,
+                            product.model,
+                            product.category
+                        ]
+                    }
+                })
+
+            if bulk_data:
+                # Bulk indexing
+                es.bulk(operations=bulk_data, refresh=True)
+                print(f"{len(products)} ürün indexlendi (offset: {offset})")
+
+            offset += BATCH_SIZE
+
+        print(f"Toplam {offset} ürün başarıyla indexlendi")
+        return True
 
     except Exception as e:
-        print(f"Indexleme hatası: {e}")
+        print(f"Bulk indexing hatası: {e}")
         return False
     finally:
         db.close()
 
+@cache_search_results(ttl=timedelta(hours=1))
 def search_products(query: str, filters: Dict[str, Any] = None, size: int = 300000) -> List[Dict]:
     """
     Elasticsearch'te ürün araması yapar
@@ -79,7 +125,8 @@ def search_products(query: str, filters: Dict[str, Any] = None, size: int = 3000
             "multi_match": {
                 "query": query,
                 "fields": ["brand^2", "model^2", "category", "description"],
-                "fuzziness": "AUTO"
+                "fuzziness": "AUTO",
+                "operator": "and"
             }
         }]
 
@@ -105,7 +152,7 @@ def search_products(query: str, filters: Dict[str, Any] = None, size: int = 3000
             must_conditions.append({"range": {"price": price_range}})
 
     try:
-        print(f"[DEBUG] Elasticsearch query: {must_conditions}")  # Debug için query'i yazdır
+        print(f"[DEBUG] Elasticsearch query: {must_conditions}")
         response = es.search(
             index=PRODUCT_INDEX,
             body={
@@ -118,7 +165,8 @@ def search_products(query: str, filters: Dict[str, Any] = None, size: int = 3000
                 "sort": [
                     {"_score": "desc"},
                     {"price": "asc"}
-                ]
+                ],
+                "_source": ["brand", "model", "price", "category", "description", "target_audience"]
             }
         )
         

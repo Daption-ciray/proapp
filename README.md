@@ -1,86 +1,82 @@
-# AI Powered Product Search API
+# Akıllı Alışveriş Asistanı
 
-Modern bir ürün arama API'si. FastAPI, GraphQL, Elasticsearch ve OpenAI entegrasyonu ile gelişmiş arama ve öneri özellikleri sunar.
+Kullanıcı tercihlerine ve arama geçmişine dayalı kişiselleştirilmiş alışveriş önerileri sunan bir web uygulaması.
 
 ## Özellikler
 
-- ✨ GraphQL API
-- 🔍 Elasticsearch ile güçlü arama
-- 🤖 OpenAI destekli alışveriş asistanı
-- 🔐 Rate limiting ve güvenlik önlemleri
-- 📝 300,000+ ürün veritabanı
-- 🌈 Türkçe dil desteği
+- 🛍️ Kişiselleştirilmiş ürün önerileri
+- 👤 Çoklu kullanıcı desteği
+- 📊 Kullanıcı tercihleri analizi
+- 🕒 Arama geçmişi takibi
+- 💬 Sohbet arayüzü
+- 📱 Responsive tasarım
+
+## Teknolojiler
+
+- Python 3.8+
+- FastAPI
+- SQLite
+- Bootstrap 5.3
+- HTML/CSS/JavaScript
 
 ## Kurulum
 
-1. Gereksinimleri yükleyin:
+1. Projeyi klonlayın:
+```bash
+git clone https://github.com/yourusername/shopping-assistant.git
+cd shopping-assistant
+```
+
+2. Sanal ortam oluşturun ve aktifleştirin:
 ```bash
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate  # Linux/Mac için
+# veya
+venv\Scripts\activate  # Windows için
+```
+
+3. Gerekli paketleri yükleyin:
+```bash
 pip install -r requirements.txt
 ```
 
-2. `.env` dosyasını oluşturun:
+4. Çevre değişkenlerini ayarlayın:
 ```bash
 cp .env.example .env
 # .env dosyasını düzenleyin
 ```
 
-3. Docker ile Elasticsearch'ü başlatın:
+5. Uygulamayı çalıştırın:
 ```bash
-docker run -d --name elasticsearch -p 9200:9200 -p 9300:9300 \
-  -e "discovery.type=single-node" \
-  -e "xpack.security.enabled=false" \
-  docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+uvicorn main:app --reload
 ```
 
-4. Veritabanını ve indeksi oluşturun:
-```bash
-python -m app.scripts.sync_data
-```
+6. Tarayıcınızda şu adresi açın: `http://localhost:8000`
 
-5. Uygulamayı başlatın:
-```bash
-uvicorn app.main:app --reload
-```
+## API Endpoints
 
-## API Kullanımı
+- `POST /chat`: Kullanıcı mesajlarını işler
+- `GET /user/preferences`: Kullanıcı tercihlerini getirir
+- `GET /user/preferences/analysis`: Kullanıcı tercih analizini getirir
+- `GET /user/search-history`: Kullanıcı arama geçmişini getirir
 
-GraphQL endpoint: `http://localhost:8000/graphql`
+## Kullanıcı Tipleri
 
-Örnek sorgular:
+1. Spor Kullanıcısı (user1)
+   - Spor ekipmanları ve giyim odaklı
+   - Nike markası tercihi
+   - 0-1500 TL fiyat aralığı
 
-```graphql
-# Ürün araması
-query {
-  searchProducts(
-    query: "spor ayakkabı"
-    minPrice: 500
-    maxPrice: 2000
-  ) {
-    brand
-    model
-    price
-    description
-  }
-}
+2. Teknoloji Kullanıcısı (user2)
+   - Elektronik ürünler odaklı
+   - Apple ve Samsung marka tercihi
+   - 0-20000 TL fiyat aralığı
 
-# Otomatik tamamlama
-query {
-  suggestProducts(prefix: "nik") {
-    suggestions
-  }
-}
-```
+## Katkıda Bulunma
 
-## Geliştirme
+1. Bu depoyu fork edin
+2. Yeni bir branch oluşturun (`git checkout -b feature/amazing`)
+3. Değişikliklerinizi commit edin (`git commit -am 'Harika özellik eklendi'`)
+4. Branch'inizi push edin (`git push origin feature/amazing`)
+5. Pull Request oluşturun
 
-- Python 3.8+
-- FastAPI
-- Elasticsearch 8.12.0
-- PostgreSQL
-- GraphQL (Strawberry)
-
-## Lisans
-
-MIT
