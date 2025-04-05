@@ -20,6 +20,7 @@ passlib[bcrypt]==1.7.4
 python-dotenv==1.0.1
 pydantic==2.6.1
 slowapi==0.1.9
+Faker==22.6.0
 
 # AI ve NLP
 openai==0.28.0
