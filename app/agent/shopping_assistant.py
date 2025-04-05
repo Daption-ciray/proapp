@@ -32,7 +32,7 @@ class ShoppingAssistant:
     def _extract_search_parameters(self, user_message: str) -> Dict[str, Any]:
         """Kullanıcı mesajından arama parametrelerini çıkar"""
         try:
-            print(f"Extracting search parameters from message: {user_message}")
+            print(f"[DEBUG] Extracting search parameters from message: {user_message}")
             messages = [
                 {
                     "role": "system", 
@@ -74,28 +74,35 @@ class ShoppingAssistant:
                     - Fiyatları her zaman sayısal değer olarak döndür (string değil)
                     - Fiyat aralığı belirtilmişse min_price ve max_price kullan
                     - Sadece bütçe belirtilmişse max_price olarak kullan
-                    - Boş değerleri null olarak bırak, boş string kullanma"""
+                    - Boş değerleri null olarak bırak, boş string kullanma
+                    - Eğer spesifik bir ürün sorgusu yoksa query'i null bırak"""
                 },
                 {"role": "user", "content": user_message}
             ]
             
             completion = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
-                messages=messages
+                messages=messages,
+                temperature=0.1  # Daha tutarlı sonuçlar için
             )
             
             result = completion.choices[0].message['content']
-            print(f"Extracted parameters: {result}")
+            print(f"[DEBUG] Extracted parameters: {result}")
             
             try:
-                return json.loads(result)
+                params = json.loads(result)
+                # Query null ise "*" olarak ayarla
+                if not params.get("query"):
+                    params["query"] = "*"
+                print(f"[DEBUG] Parsed parameters: {json.dumps(params, indent=2, ensure_ascii=False)}")
+                return params
             except json.JSONDecodeError:
-                print("Failed to parse JSON response, using default parameters")
-                return {"query": user_message, "filters": {}}
+                print("[DEBUG] Failed to parse JSON response, using default parameters")
+                return {"query": "*", "filters": {}}
                 
         except Exception as e:
-            print(f"Parameter extraction error: {e}")
-            return {"query": user_message, "filters": {}}
+            print(f"[DEBUG] Parameter extraction error: {e}")
+            return {"query": "*", "filters": {}}
 
     def _format_product_suggestions(self, products: List[Dict]) -> str:
         """Ürün önerilerini formatla"""
@@ -123,6 +130,7 @@ class ShoppingAssistant:
         try:
             # Arama parametrelerini çıkar
             search_params = self._extract_search_parameters(user_message)
+            print(f"[DEBUG] Search parameters: {json.dumps(search_params, indent=2, ensure_ascii=False)}")
             
             # Elasticsearch'te arama yap
             products = search_products(
@@ -131,33 +139,68 @@ class ShoppingAssistant:
                 size=100  # Performans için ilk 100 sonuç yeterli
             )
             
+            print(f"[DEBUG] Found {len(products)} products")
+            if products:
+                print(f"[DEBUG] First product: {json.dumps(products[0], indent=2, ensure_ascii=False)}")
+            
             # Ürün önerilerini formatla
             product_suggestions = self._format_product_suggestions(products)
+            print(f"[DEBUG] Formatted suggestions length: {len(product_suggestions)}")
             
-            # Optimize edilmiş sistem prompt'u
-            system_prompt = """Sen bir alışveriş asistanısın. Kullanıcıya kısa ve öz yanıtlar ver.
-            - Ürünleri fiyat ve özelliklerine göre karşılaştır
-            - Kullanıcının bütçesine uygun ürünleri öner
-            - Türkçe yanıt ver"""
+            # RAG için optimize edilmiş sistem prompt'u
+            system_prompt = """Sen bir alışveriş asistanısın. Görevin, kullanıcının isteklerine göre ürün önermek.
+
+ÖRNEKLER:
+
+Kullanıcı: "Spor ayakkabı arıyorum, bütçem 500 TL"
+Context: "İşte size uygun olabilecek ürünler:
+1. Nike Air Max, Fiyat: 450 TL, Kategori: Ayakkabı
+2. Adidas Runner, Fiyat: 480 TL, Kategori: Ayakkabı"
+Asistan: Bütçenize uygun spor ayakkabıları buldum. Nike Air Max (450 TL) ve Adidas Runner (480 TL) mevcut. Her ikisi de 500 TL bütçenizin altında. Nike Air Max biraz daha ekonomik bir seçenek.
+
+Kullanıcı: "2000 TL'ye laptop var mı?"
+Context: "Maalesef arama kriterlerinize uygun ürün bulamadım. Farklı bir arama yapmak ister misiniz?"
+Asistan: Maalesef 2000 TL bütçe ile uygun bir laptop bulamadım. Bütçenizi biraz artırmanızı veya ikinci el seçenekleri değerlendirmenizi öneririm.
+
+ÖNEMLİ KURALLAR:
+1. SADECE context'te verilen ürünleri önerebilirsin
+2. Context'te olmayan ürünleri ASLA önerme
+3. Fiyatları ve özellikleri değiştirme
+4. Context'teki ürün listesini aynen kullan
+5. Kendi kafandan ürün uydurma
+
+KULLANICI MESAJI:
+{user_message}
+
+CONTEXT (SADECE BU ÜRÜNLERİ ÖNEREBİLİRSİN):
+{product_suggestions}
+
+Yukarıdaki context'te verilen ürün listesini kullanarak kullanıcıya yardımcı ol. SADECE bu listedeki ürünleri kullanabilirsin!"""
             
             # OpenAI ile yanıt oluştur
             messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-                {"role": "system", "content": product_suggestions}
+                {
+                    "role": "system", 
+                    "content": system_prompt.format(
+                        user_message=user_message,
+                        product_suggestions=product_suggestions
+                    )
+                }
             ]
             
             completion = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=messages,
-                temperature=0.7,
-                max_tokens=300  # Yanıt uzunluğunu sınırla
+                temperature=0.2,  # Daha da tutarlı yanıtlar için
+                max_tokens=800
             )
             
-            return completion.choices[0].message['content']
+            response = completion.choices[0].message['content']
+            print(f"[DEBUG] Final response length: {len(response)}")
+            return response
             
         except Exception as e:
-            print(f"Error processing message: {e}")
+            print(f"[DEBUG] Error processing message: {e}")
             return "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin."
 
     def reset_conversation(self):

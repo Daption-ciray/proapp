@@ -67,76 +67,59 @@ def search_products(query: str, filters: Dict[str, Any] = None, size: int = 3000
     if not es:
         return []
 
-    # Source filtering - sadece gerekli alanları getir
-    _source = ["brand", "model", "price", "category", "description", "target_audience"]
+    # Query kontrolü
+    if not query or not isinstance(query, str):
+        query = "*"  # Eğer query None veya string değilse, tüm ürünleri getir
 
-    # Base query optimization
-    if query and query.strip():
-        search_query = {
-            "bool": {
-                "should": [
-                    {
-                        "multi_match": {
-                            "query": query,
-                            "fields": ["brand^3", "model^2", "category^2", "description"],
-                            "type": "most_fields",
-                            "operator": "or",
-                            "fuzziness": "AUTO",
-                            "prefix_length": 2
-                        }
-                    }
-                ],
-                "minimum_should_match": 1
-            }
-        }
+    # Base query - multi_match ile arama
+    if query == "*":
+        must_conditions = [{"match_all": {}}]
     else:
-        search_query = {"match_all": {}}
+        must_conditions = [{
+            "multi_match": {
+                "query": query,
+                "fields": ["brand^2", "model^2", "category", "description"],
+                "fuzziness": "AUTO"
+            }
+        }]
 
-    # Filtreleri optimize et
+    # Filtreleri ekle
     if filters:
-        filter_list = []
-        
-        # Term queries için keyword field kullan
         if filters.get("category"):
-            filter_list.append({"term": {"category.keyword": filters["category"]}})
+            must_conditions.append({"term": {"category.keyword": filters["category"]}})
         
         if filters.get("brand"):
-            filter_list.append({"term": {"brand.keyword": filters["brand"]}})
+            must_conditions.append({"term": {"brand.keyword": filters["brand"]}})
         
         if filters.get("target_audience"):
-            filter_list.append({"term": {"target_audience.keyword": filters["target_audience"]}})
+            must_conditions.append({"term": {"target_audience.keyword": filters["target_audience"]}})
         
         # Fiyat filtresi
-        min_price = filters.get("min_price")
-        max_price = filters.get("max_price")
+        price_range = {}
+        if filters.get("min_price") is not None:
+            price_range["gte"] = float(filters["min_price"])
+        if filters.get("max_price") is not None:
+            price_range["lte"] = float(filters["max_price"])
         
-        if min_price is not None or max_price is not None:
-            price_range = {}
-            if min_price is not None:
-                price_range["gte"] = float(min_price)
-            if max_price is not None:
-                price_range["lte"] = float(max_price)
-            
-            if price_range:
-                filter_list.append({"range": {"price": price_range}})
-
-    # Optimize edilmiş sorgu yapısı
-    final_query = {
-        "bool": {
-            "must": search_query if isinstance(search_query, dict) and "bool" not in search_query else [search_query],
-            "filter": filter_list if filters and filter_list else []
-        }
-    }
+        if price_range:
+            must_conditions.append({"range": {"price": price_range}})
 
     try:
-        # Track_total_hits'i false yaparak sayım performansını artır
+        print(f"[DEBUG] Elasticsearch query: {must_conditions}")  # Debug için query'i yazdır
         response = es.search(
             index=PRODUCT_INDEX,
-            query=final_query,
-            _source=_source,
-            size=min(size, 100),  # İlk sayfada maksimum 100 sonuç getir
-            track_total_hits=False,
-            sort=[{"_score": "desc"}, {"price": "asc"}]
+            body={
+                "query": {
+                    "bool": {
+                        "must": must_conditions
+                    }
+                },
+                "size": min(size, 100),  # Maksimum 100 sonuç getir
+                "sort": [
+                    {"_score": "desc"},
+                    {"price": "asc"}
+                ]
+            }
         )
         
         return [hit["_source"] for hit in response["hits"]["hits"]]
