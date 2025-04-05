@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alışveriş Asistanı</title>
+    <title>Akıllı Alışveriş Asistanı</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
@@ -14,72 +14,140 @@
             background-color: #f8f9fa;
         }
         .container {
-            max-width: 900px;
+            max-width: 1200px;
             margin: 2rem auto;
         }
+        .user-selector {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.05);
+        }
+        .user-btn {
+            padding: 15px 25px;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .user-btn i {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+        .user-btn.active {
+            transform: translateY(-3px);
+        }
+        .user-btn:not(.active) {
+            opacity: 0.7;
+        }
+        .user-btn:hover {
+            transform: translateY(-3px);
+            opacity: 1;
+        }
+        .chat-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
         .chat-messages {
-            height: 400px;
+            height: 500px;
             overflow-y: auto;
-            padding: 1rem;
+            padding: 1.5rem;
             background: #ffffff;
-            border: 1px solid #dee2e6;
-            border-radius: 0.375rem;
         }
         .message {
-            margin-bottom: 1rem;
-            padding: 0.75rem 1rem;
-            border-radius: 0.375rem;
+            margin-bottom: 1.5rem;
             max-width: 80%;
+            position: relative;
+        }
+        .message-content {
+            padding: 12px 20px;
+            border-radius: 15px;
+            position: relative;
         }
         .user-message {
-            background: #0d6efd;
-            color: white;
             margin-left: auto;
         }
-        .assistant-message {
+        .user-message .message-content {
+            background: #0d6efd;
+            color: white;
+        }
+        .assistant-message .message-content {
             background: #f8f9fa;
             border: 1px solid #dee2e6;
         }
-        .info-card {
-            height: 100%;
-            transition: transform 0.2s;
+        .message-time {
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-top: 5px;
         }
-        .info-card:hover {
-            transform: translateY(-5px);
+        .input-container {
+            padding: 1.5rem;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
         }
-        .user-btn.active {
-            background: #0d6efd !important;
-            border-color: #0d6efd !important;
+        .user-info {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.05);
+        }
+        .preferences, .history {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.05);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
-        <div class="card shadow-sm mb-4">
-            <div class="card-body">
-                <h2 class="card-title text-center mb-4">
-                    <i class="bi bi-robot"></i> Akıllı Alışveriş Asistanı
-                </h2>
-                <div class="d-flex justify-content-center gap-3">
-                    <button class="btn btn-outline-primary user-btn active" onclick="switchUser('user1')">
-                        <i class="bi bi-person-circle"></i> Spor Kullanıcısı
+        <!-- Kullanıcı Seçici -->
+        <div class="user-selector">
+            <h3 class="text-center mb-4">Kullanıcı Seçin</h3>
+            <div class="row justify-content-center text-center g-3">
+                <div class="col-md-4">
+                    <button class="btn btn-outline-primary user-btn w-100 h-100 d-flex flex-column align-items-center justify-content-center active" onclick="switchUser('user1')">
+                        <i class="bi bi-person-arms-up mb-2"></i>
+                        <div>
+                            <strong>Spor Kullanıcısı</strong>
+                            <div class="small text-muted">Nike, Adidas tercihleri</div>
+                        </div>
                     </button>
-                    <button class="btn btn-outline-primary user-btn" onclick="switchUser('user2')">
-                        <i class="bi bi-person-circle"></i> Teknoloji Kullanıcısı
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-outline-primary user-btn w-100 h-100 d-flex flex-column align-items-center justify-content-center" onclick="switchUser('user2')">
+                        <i class="bi bi-laptop mb-2"></i>
+                        <div>
+                            <strong>Teknoloji Kullanıcısı</strong>
+                            <div class="small text-muted">Apple, Samsung tercihleri</div>
+                        </div>
+                    </button>
+                </div>
+                <div class="col-md-4">
+                    <button class="btn btn-outline-secondary user-btn w-100 h-100 d-flex flex-column align-items-center justify-content-center" onclick="switchUser(null)">
+                        <i class="bi bi-person-circle mb-2"></i>
+                        <div>
+                            <strong>Genel Kullanıcı</strong>
+                            <div class="small text-muted">Profil olmadan sohbet</div>
+                        </div>
                     </button>
                 </div>
             </div>
         </div>
 
-        <div class="row mb-4">
-            <!-- Chat Section -->
-            <div class="col-lg-8">
-                <div class="card shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="chat-messages mb-3" id="chatMessages">
-                            <!-- Messages will be displayed here -->
-                        </div>
+        <div class="row">
+            <!-- Sol Kolon: Chat -->
+            <div class="col-lg-8 mb-4">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <!-- Mesajlar burada gösterilecek -->
+                    </div>
+                    <div class="input-container">
                         <div class="input-group">
                             <input type="text" id="messageInput" class="form-control" placeholder="Mesajınızı yazın...">
                             <button class="btn btn-primary" id="sendButton">
@@ -90,44 +158,32 @@
                 </div>
             </div>
 
-            <!-- User Info Section -->
-            <div class="col-lg-4">
-                <div class="card shadow-sm info-card mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            <i class="bi bi-person"></i> Kullanıcı Bilgileri
-                        </h5>
-                        <div id="userInfo">
-                            <!-- User info will be displayed here -->
-                        </div>
+            <!-- Sağ Kolon: Kullanıcı Bilgileri -->
+            <div class="col-lg-4" id="userInfoContainer">
+                <div class="user-info">
+                    <h5 class="mb-3">
+                        <i class="bi bi-person"></i> Kullanıcı Bilgileri
+                    </h5>
+                    <div id="userInfo">
+                        <!-- Kullanıcı bilgileri burada gösterilecek -->
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Preferences and History Section -->
-        <div class="row">
-            <div class="col-md-6 mb-4">
-                <div class="card shadow-sm info-card">
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            <i class="bi bi-graph-up"></i> Tercih Analizi
-                        </h5>
-                        <div id="userPreferences">
-                            <!-- Preferences will be displayed here -->
-                        </div>
+                <div class="preferences">
+                    <h5 class="mb-3">
+                        <i class="bi bi-graph-up"></i> Tercih Analizi
+                    </h5>
+                    <div id="userPreferences">
+                        <!-- Tercihler burada gösterilecek -->
                     </div>
                 </div>
-            </div>
-            <div class="col-md-6 mb-4">
-                <div class="card shadow-sm info-card">
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            <i class="bi bi-clock-history"></i> Arama Geçmişi
-                        </h5>
-                        <div id="searchHistory">
-                            <!-- Search history will be displayed here -->
-                        </div>
+
+                <div class="history">
+                    <h5 class="mb-3">
+                        <i class="bi bi-clock-history"></i> Arama Geçmişi
+                    </h5>
+                    <div id="searchHistory">
+                        <!-- Arama geçmişi burada gösterilecek -->
                     </div>
                 </div>
             </div>
@@ -141,28 +197,57 @@
         
         async function switchUser(userId) {
             currentUser = userId;
+            
+            // Buton stillerini güncelle
             document.querySelectorAll('.user-btn').forEach(btn => {
                 btn.classList.remove('active');
-                if (btn.textContent.includes(userId === 'user1' ? 'Spor' : 'Teknoloji')) {
-                    btn.classList.add('active');
-                }
             });
+            event.currentTarget.classList.add('active');
             
-            await updateUserInfo();
+            // Sağ kolonu güncelle
+            const userInfoContainer = document.getElementById('userInfoContainer');
+            if (userId === null) {
+                userInfoContainer.style.display = 'none';
+            } else {
+                userInfoContainer.style.display = 'block';
+                await updateUserInfo();
+            }
+            
+            // Chat geçmişini temizle
             document.getElementById('chatMessages').innerHTML = '';
+            
+            // Hoş geldin mesajı ekle
+            const welcomeMessage = userId === null 
+                ? 'Merhaba! Ben alışveriş asistanınız. Size nasıl yardımcı olabilirim?'
+                : `Merhaba! Ben ${userId === 'user1' ? 'spor' : 'teknoloji'} odaklı alışveriş asistanınız. Size nasıl yardımcı olabilirim?`;
+                
+            document.getElementById('chatMessages').innerHTML += `
+                <div class="message assistant-message">
+                    <div class="message-content">
+                        <i class="bi bi-robot"></i> ${welcomeMessage}
+                    </div>
+                    <div class="message-time">${new Date().toLocaleTimeString()}</div>
+                </div>
+            `;
         }
 
         async function updateUserInfo() {
+            if (!currentUser) return;
+            
             try {
-                const prefsResponse = await fetch(`/user/preferences?user_id=${currentUser}`);
-                const prefs = await prefsResponse.json();
-                
-                const analysisResponse = await fetch(`/user/preferences/analysis?user_id=${currentUser}`);
-                const analysis = await analysisResponse.json();
-                
-                const historyResponse = await fetch(`/user/search-history?user_id=${currentUser}`);
-                const history = await historyResponse.json();
+                const [prefsResponse, analysisResponse, historyResponse] = await Promise.all([
+                    fetch(`/user/preferences?user_id=${currentUser}`),
+                    fetch(`/user/preferences/analysis?user_id=${currentUser}`),
+                    fetch(`/user/search-history?user_id=${currentUser}`)
+                ]);
 
+                const [prefs, analysis, history] = await Promise.all([
+                    prefsResponse.json(),
+                    analysisResponse.json(),
+                    historyResponse.json()
+                ]);
+
+                // Kullanıcı bilgilerini güncelle
                 document.getElementById('userInfo').innerHTML = `
                     <div class="mb-3">
                         <h6 class="text-muted">Aktif Kullanıcı</h6>
@@ -178,6 +263,7 @@
                     </div>
                 `;
 
+                // Tercihleri güncelle
                 document.getElementById('userPreferences').innerHTML = `
                     <div class="mb-3">
                         <h6 class="text-muted">En Çok Aranan Kategoriler</h6>
@@ -186,17 +272,6 @@
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
                                     ${c.category}
                                     <span class="badge bg-primary rounded-pill">${c.count}</span>
-                                </li>
-                            `).join('')}
-                        </ul>
-                    </div>
-                    <div class="mb-3">
-                        <h6 class="text-muted">En Çok Aranan Markalar</h6>
-                        <ul class="list-group list-group-flush">
-                            ${analysis.top_brands.map(b => `
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    ${b.brand}
-                                    <span class="badge bg-secondary rounded-pill">${b.count}</span>
                                 </li>
                             `).join('')}
                         </ul>
@@ -211,6 +286,7 @@
                     </div>
                 `;
 
+                // Arama geçmişini güncelle
                 document.getElementById('searchHistory').innerHTML = `
                     <div class="list-group list-group-flush">
                         ${history.history.map(h => `
@@ -237,43 +313,75 @@
             
             if (message) {
                 const chatMessages = document.getElementById('chatMessages');
+                
+                // Kullanıcı mesajını göster
                 chatMessages.innerHTML += `
-                    <div class="message user-message">${message}</div>
+                    <div class="message user-message">
+                        <div class="message-content">${message}</div>
+                        <div class="message-time">${new Date().toLocaleTimeString()}</div>
+                    </div>
                 `;
 
                 try {
+                    // Request body oluştur
+                    const requestBody = {
+                        message: message
+                    };
+                    
+                    // Eğer kullanıcı seçiliyse user_id ekle
+                    if (currentUser) {
+                        requestBody.user_id = currentUser;
+                    }
+                    
                     const response = await fetch('/chat', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({
-                            message: message,
-                            user_id: currentUser
-                        })
+                        body: JSON.stringify(requestBody)
                     });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
 
                     const data = await response.json();
                     
+                    // Asistan yanıtını göster
                     chatMessages.innerHTML += `
-                        <div class="message assistant-message">${data.response}</div>
+                        <div class="message assistant-message">
+                            <div class="message-content">
+                                <i class="bi bi-robot"></i>
+                                <div class="chat-response">
+                                    ${data.response.split('\n').join('<br>')}
+                                </div>
+                            </div>
+                            <div class="message-time">${new Date().toLocaleTimeString()}</div>
+                        </div>
                     `;
-
+                    
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                     messageInput.value = '';
                     
-                    await updateUserInfo();
+                    if (currentUser) {
+                        await updateUserInfo();
+                    }
                 } catch (error) {
                     console.error('Mesaj gönderilirken hata:', error);
                     chatMessages.innerHTML += `
                         <div class="message assistant-message text-danger">
-                            <i class="bi bi-exclamation-triangle"></i> Bir hata oluştu. Lütfen tekrar deneyin.
+                            <div class="message-content">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                Bir hata oluştu. Lütfen tekrar deneyin.
+                            </div>
+                            <div class="message-time">${new Date().toLocaleTimeString()}</div>
                         </div>
                     `;
                 }
             }
         }
 
+        // Event listeners
         document.getElementById('sendButton').addEventListener('click', sendMessage);
         document.getElementById('messageInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -281,8 +389,9 @@
             }
         });
 
+        // Sayfa yüklendiğinde
         window.addEventListener('load', () => {
-            updateUserInfo();
+            switchUser('user1');
         });
     </script>
 </body>

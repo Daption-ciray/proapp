@@ -24,7 +24,20 @@ class ShoppingAssistant:
         self.prefs_manager = UserPreferencesManager(self.db)
         
     def _create_system_prompt(self, user_id: Optional[str] = None) -> str:
-        base_prompt = """Sen bir alışveriş asistanısın. Görevin, kullanıcının isteklerine göre ürün önermek."""
+        base_prompt = """Sen hem bir alışveriş asistanı hem de arkadaş canlısı bir sohbet arkadaşısın. 
+        
+        GÖREVLER:
+        1. Kullanıcıyla doğal ve samimi bir şekilde sohbet et
+        2. Günlük konuşmalara (hal hatır sorma, selamlaşma vb.) doğal yanıtlar ver
+        3. Alışveriş ile ilgili konularda profesyonel önerilerde bulun
+        4. Kullanıcının ruh haline ve konuşma tarzına uyum sağla
+        
+        KONUŞMA TARZI:
+        - Samimi ve arkadaş canlısı ol
+        - Türkçe karakterleri doğru kullan
+        - Emojiler ve günlük konuşma dili kullanabilirsin
+        - Kısa ve öz cevaplar ver
+        """
 
         if user_id:
             # Kullanıcı tercihlerini al
@@ -52,6 +65,9 @@ class ShoppingAssistant:
         base_prompt += """
         ÖRNEKLER:
 
+        Kullanıcı: "Nasılsın?"
+        Asistan: "İyiyim, teşekkür ederim! Sen nasılsın? 😊"
+
         Kullanıcı: "Spor ayakkabı arıyorum, bütçem 500 TL"
         Context: "İşte size uygun olabilecek ürünler:
         1. Nike Air Max, Fiyat: 450 TL, Kategori: Ayakkabı
@@ -59,11 +75,12 @@ class ShoppingAssistant:
         Asistan: Bütçenize uygun spor ayakkabıları buldum. Nike Air Max (450 TL) ve Adidas Runner (480 TL) mevcut. Her ikisi de 500 TL bütçenizin altında. Nike Air Max biraz daha ekonomik bir seçenek.
 
         ÖNEMLİ KURALLAR:
-        1. SADECE context'te verilen ürünleri önerebilirsin
+        1. Alışveriş önerilerinde SADECE context'te verilen ürünleri önerebilirsin
         2. Context'te olmayan ürünleri ASLA önerme
         3. Fiyatları ve özellikleri değiştirme
         4. Context'teki ürün listesini aynen kullan
         5. Kendi kafandan ürün uydurma
+        6. Günlük sohbetlerde doğal ve samimi ol
         """
         return base_prompt
 
@@ -83,6 +100,7 @@ class ShoppingAssistant:
                             "min_price": null,
                             "max_price": null,
                             "brand": null,
+                            "color": null,
                             "target_audience": null
                         }
                     }
@@ -107,12 +125,24 @@ class ShoppingAssistant:
                             "category": "Ayakkabı"
                         }
                     }
+
+                    - "Kırmızı renkli converse" ->
+                    {
+                        "query": "ayakkabı",
+                        "filters": {
+                            "brand": "Converse",
+                            "color": "kırmızı",
+                            "category": "Ayakkabı"
+                        }
+                    }
                     
                     Önemli:
                     - Fiyatları her zaman sayısal değer olarak döndür (string değil)
                     - Fiyat aralığı belirtilmişse min_price ve max_price kullan
                     - Sadece bütçe belirtilmişse max_price olarak kullan
                     - Boş değerleri null olarak bırak, boş string kullanma
+                    - Renk belirtilmişse color parametresini ekle
+                    - Marka belirtilmişse brand parametresini ekle
                     - Eğer spesifik bir ürün sorgusu yoksa query'i null bırak"""
                 },
                 {"role": "user", "content": user_message}
@@ -145,7 +175,14 @@ class ShoppingAssistant:
     def _format_product_suggestions(self, products: List[Dict]) -> str:
         """Ürün önerilerini formatla"""
         if not products:
-            return "Maalesef arama kriterlerinize uygun ürün bulamadım. Farklı bir arama yapmak ister misiniz?"
+            return """Üzgünüm, arama kriterlerinize uygun ürün bulamadım. Size daha iyi yardımcı olabilmem için:
+
+1. Fiyat aralığınızı biraz genişletebilirsiniz
+2. Farklı markalar deneyebilirsiniz
+3. Benzer kategorilerde arama yapabiliriz
+4. Arama kriterlerinizi değiştirebilirsiniz
+
+Ne yapmak istersiniz? Size yardımcı olmaktan memnuniyet duyarım! 😊"""
         
         # En fazla 10 ürün göster
         products = sorted(products[:10], key=lambda x: x["price"])
@@ -166,14 +203,34 @@ class ShoppingAssistant:
     async def process_message(self, user_message: str, user_id: Optional[str] = None) -> str:
         """Kullanıcı mesajını işle ve yanıt üret"""
         try:
-            # Arama parametrelerini çıkar
+            # Önce mesajın alışveriş ile ilgili olup olmadığını kontrol et
+            is_shopping_related = await self._is_shopping_query(user_message)
+            
+            if not is_shopping_related:
+                # Genel sohbet yanıtı oluştur
+                messages = [
+                    {
+                        "role": "system", 
+                        "content": self._create_system_prompt(user_id)
+                    },
+                    {"role": "user", "content": user_message}
+                ]
+                
+                completion = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=800
+                )
+                
+                return completion.choices[0].message['content']
+            
+            # Alışveriş ile ilgili mesaj ise normal akışa devam et
             search_params = self._extract_search_parameters(user_message)
             print(f"[DEBUG] Search parameters: {json.dumps(search_params, indent=2, ensure_ascii=False)}")
             
-            # Kullanıcı tercihlerini entegre et
             if user_id:
                 prefs = self.prefs_manager.get_user_preferences(user_id)
-                # Kullanıcının tercih ettiği markaları ve kategorileri dikkate al
                 if not search_params.get("filters"):
                     search_params["filters"] = {}
                 if prefs["preferred_brands"] and not search_params["filters"].get("brand"):
@@ -181,7 +238,7 @@ class ShoppingAssistant:
                 if prefs["favorite_categories"] and not search_params["filters"].get("category"):
                     search_params["filters"]["preferred_categories"] = prefs["favorite_categories"]
 
-            # Elasticsearch'te arama yap
+            # İlk aramayı yap
             products = search_products(
                 query=search_params["query"],
                 filters=search_params.get("filters", {}),
@@ -189,10 +246,57 @@ class ShoppingAssistant:
             )
             
             print(f"[DEBUG] Found {len(products)} products")
-            if products:
-                print(f"[DEBUG] First product: {json.dumps(products[0], indent=2, ensure_ascii=False)}")
             
-            # Arama geçmişine ekle
+            # Ürün bulunamadıysa, filtreleri gevşeterek tekrar dene
+            if not products:
+                # Kullanıcının orijinal arama terimlerini sakla
+                original_query = search_params["query"]
+                original_filters = search_params.get("filters", {}).copy()
+                
+                # Renk filtresi varsa kaldır ve tekrar dene
+                if "color" in search_params.get("filters", {}):
+                    search_params["filters"].pop("color")
+                    products = search_products(
+                        query=search_params["query"],
+                        filters=search_params.get("filters", {}),
+                        size=100
+                    )
+                    
+                    if products:
+                        response = f"""Üzgünüm, tam olarak istediğiniz renkte ürün bulamadım. Ancak aradığınız ürünün diğer renk seçenekleri mevcut:
+
+{self._format_product_suggestions(products)}
+
+İsterseniz:
+1. Farklı bir renk seçebilirsiniz
+2. Başka bir marka deneyebiliriz
+3. Benzer ürünlere bakabiliriz
+
+Size nasıl yardımcı olabilirim?"""
+                        return response
+
+                # Marka spesifik arama yap
+                if "brand" in search_params.get("filters", {}):
+                    brand_name = search_params["filters"]["brand"]
+                    similar_products = search_products(
+                        query=brand_name,
+                        filters={},
+                        size=10
+                    )
+                    
+                    if similar_products:
+                        response = f"""Üzgünüm, aradığınız spesifik {brand_name} ürününü bulamadım, ancak bu markadan başka ürünler mevcut:
+
+{self._format_product_suggestions(similar_products)}
+
+İsterseniz:
+1. Bu ürünlerden birini inceleyebilirsiniz
+2. Farklı bir marka deneyebiliriz
+3. Benzer ürünlere bakabiliriz
+
+Nasıl devam etmek istersiniz?"""
+                        return response
+
             if user_id:
                 self.prefs_manager.add_search_history(
                     user_id=user_id,
@@ -201,11 +305,8 @@ class ShoppingAssistant:
                     results_count=len(products)
                 )
             
-            # Ürün önerilerini formatla
             product_suggestions = self._format_product_suggestions(products)
-            print(f"[DEBUG] Formatted suggestions length: {len(product_suggestions)}")
             
-            # OpenAI ile yanıt oluştur
             messages = [
                 {
                     "role": "system", 
@@ -224,12 +325,46 @@ class ShoppingAssistant:
             )
             
             response = completion.choices[0].message['content']
-            print(f"[DEBUG] Final response length: {len(response)}")
+            if not products:
+                response += "\n\nBaşka bir şey sormak isterseniz, size yardımcı olmaktan memnuniyet duyarım."
             return response
             
         except Exception as e:
             print(f"[DEBUG] Error processing message: {e}")
             return "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin."
+
+    async def _is_shopping_query(self, message: str) -> bool:
+        """Mesajın alışveriş ile ilgili olup olmadığını kontrol et"""
+        try:
+            messages = [
+                {
+                    "role": "system",
+                    "content": """Verilen mesajın alışveriş/ürün araması ile ilgili olup olmadığını belirle.
+                    Sadece "true" veya "false" yanıtı ver.
+                    
+                    Örnekler:
+                    - "Nasılsın?" -> false
+                    - "Spor ayakkabı arıyorum" -> true
+                    - "İyi günler!" -> false
+                    - "Laptop fiyatları ne kadar?" -> true
+                    """
+                },
+                {"role": "user", "content": message}
+            ]
+            
+            completion = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                temperature=0.1,
+                max_tokens=10
+            )
+            
+            result = completion.choices[0].message['content'].lower().strip()
+            return result == "true"
+            
+        except Exception as e:
+            print(f"[DEBUG] Error in is_shopping_query: {e}")
+            return True  # Hata durumunda varsayılan olarak alışveriş sorgusu kabul et
 
     def reset_conversation(self, user_id: Optional[str] = None):
         """Sohbet geçmişini temizle"""

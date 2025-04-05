@@ -68,8 +68,7 @@ shopping_assistant = ShoppingAssistant()
 
 @app.post("/chat")
 async def chat_with_assistant(
-    request: Dict[str, str],
-    user_id: Optional[str] = None,
+    request: Dict[str, Any],
     db: SessionLocal = Depends(get_db)
 ):
     """
@@ -77,12 +76,14 @@ async def chat_with_assistant(
     
     Request body:
     {
-        "message": "Spor ayakkabı arıyorum, bütçem 1000 TL"
+        "message": "Spor ayakkabı arıyorum, bütçem 1000 TL",
+        "user_id": "user1"  # Optional
     }
     """
     if "message" not in request:
         raise HTTPException(status_code=400, detail="Message field is required")
     
+    user_id = request.get("user_id")  # None if not provided
     response = await shopping_assistant.process_message(request["message"], user_id)
     return {"response": response}
 
@@ -94,21 +95,34 @@ async def reset_chat(user_id: Optional[str] = None):
 
 @app.get("/user/preferences")
 async def get_user_preferences(
-    user_id: str,
+    user_id: Optional[str] = None,
     db: SessionLocal = Depends(get_db)
 ):
     """Kullanıcı tercihlerini getir"""
+    if not user_id:
+        return {
+            "favorite_categories": [],
+            "preferred_brands": [],
+            "price_range": {"min": None, "max": None}
+        }
+    
     prefs_manager = UserPreferencesManager(db)
     preferences = prefs_manager.get_user_preferences(user_id)
     return preferences
 
 @app.post("/user/preferences")
 async def update_user_preferences(
-    user_id: str,
     preferences: Dict[str, Any],
-    db: SessionLocal = Depends(get_db)
+    db: SessionLocal = Depends(get_db),
+    user_id: Optional[str] = None
 ):
     """Kullanıcı tercihlerini güncelle"""
+    if not user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot update preferences for general user mode"
+        )
+    
     prefs_manager = UserPreferencesManager(db)
     success = prefs_manager.update_preferences(user_id, preferences)
     if not success:
@@ -117,21 +131,31 @@ async def update_user_preferences(
 
 @app.get("/user/search-history")
 async def get_search_history(
-    user_id: str,
+    user_id: Optional[str] = None,
     limit: int = 10,
     db: SessionLocal = Depends(get_db)
 ):
     """Kullanıcının arama geçmişini getir"""
+    if not user_id:
+        return {"history": []}
+    
     prefs_manager = UserPreferencesManager(db)
     history = prefs_manager.get_recent_searches(user_id, limit)
     return {"history": history}
 
 @app.get("/user/preferences/analysis")
 async def get_preferences_analysis(
-    user_id: str,
+    user_id: Optional[str] = None,
     db: SessionLocal = Depends(get_db)
 ):
     """Kullanıcı tercihlerinin analizini getir"""
+    if not user_id:
+        return {
+            "top_categories": [],
+            "top_brands": [],
+            "average_price_range": {"min": None, "max": None}
+        }
+    
     prefs_manager = UserPreferencesManager(db)
     analysis = prefs_manager.analyze_user_preferences(user_id)
     return analysis
