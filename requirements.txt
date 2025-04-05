@@ -1,0 +1,25 @@
+# Web Framework ve Sunucu
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+
+# Veritabanı
+sqlalchemy==2.0.27
+psycopg2-binary==2.9.9
+
+# Elasticsearch
+elasticsearch==8.12.0
+
+# GraphQL
+strawberry-graphql==0.219.2
+
+# Güvenlik ve Doğrulama
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Yardımcı Kütüphaneler
+python-dotenv==1.0.1
+pydantic==2.6.1
+slowapi==0.1.9
+
+# AI ve NLP
+openai==0.28.0
